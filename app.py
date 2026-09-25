@@ -1,112 +1,71 @@
+streamlit_code = r'''
 import streamlit as st
 import pandas as pd
+import numpy as np
 import joblib
-import sqlite3
+import tensorflow as tf
 
-# -----------------------------
-# Page Configuration
-# -----------------------------
-st.set_page_config(
-    page_title="Vendor Invoice Intelligence",
-    page_icon="📊",
-    layout="wide"
-)
+model = tf.keras.models.load_model("diabetes_mlp.keras")
+preprocessor = joblib.load("diabetes_preprocessor.pkl")
 
-# -----------------------------
-# Load Model
-# -----------------------------
-model = joblib.load("freight_model.pkl")
+st.set_page_config(page_title="Diabetes Prediction", page_icon="🩺")
+st.title("🩺 Diabetes Prediction System")
+st.write("Enter patient information to obtain a model prediction and probability.")
 
-# -----------------------------
-# Database Connection
-# -----------------------------
-conn = sqlite3.connect("inventory.db", check_same_thread=False)
+pregnancies = st.number_input("Pregnancies", 0, 20, 1)
+glucose = st.number_input("Glucose", 1.0, 300.0, 100.0)
+blood_pressure = st.number_input("Blood Pressure", 1.0, 200.0, 70.0)
+skin_thickness = st.number_input("Skin Thickness", 0.0, 100.0, 20.0)
+insulin = st.number_input("Insulin", 0.0, 900.0, 80.0)
+bmi = st.number_input("BMI", 1.0, 80.0, 25.0)
+pedigree = st.number_input("Diabetes Pedigree Function", 0.0, 3.0, 0.3)
+age = st.number_input("Age", 1, 120, 25)
 
-# -----------------------------
-# App Title
-# -----------------------------
-st.title("📊 Vendor Invoice Intelligence System")
-st.write(
-    "Enter a new invoice below to predict expected freight "
-    "and assess invoice risk."
-)
+if st.button("Predict Diabetes"):
 
-st.divider()
+    data = pd.DataFrame({
+        "Pregnancies": [pregnancies],
+        "Glucose": [glucose],
+        "BloodPressure": [blood_pressure],
+        "SkinThickness": [skin_thickness],
+        "Insulin": [insulin],
+        "BMI": [bmi],
+        "DiabetesPedigreeFunction": [pedigree],
+        "Age": [age]
+    })
 
-# -----------------------------
-# Invoice Input
-# -----------------------------
-st.subheader("Enter New Invoice")
+    for col in ["Glucose", "BloodPressure", "SkinThickness", "Insulin", "BMI"]:
+        data[col] = data[col].replace(0, np.nan)
 
-col1, col2 = st.columns(2)
-
-with col1:
-    dollars = st.number_input(
-        "Invoice Amount ($)",
-        min_value=0.0,
-        value=18500.0,
-        step=100.0
+    data["BMI_Category"] = pd.cut(
+        data["BMI"], [0, 18.5, 25, 30, np.inf],
+        labels=["Underweight", "Normal", "Overweight", "Obese"]
     )
 
-with col2:
-    actual_freight = st.number_input(
-        "Actual Freight Cost ($)",
-        min_value=0.0,
-        value=200.0,
-        step=10.0
+    data["Age_Group"] = pd.cut(
+        data["Age"], [0, 25, 40, 60, np.inf],
+        labels=["Young", "Adult", "Middle_Aged", "Senior"]
     )
 
-# -----------------------------
-# Analyze Invoice
-# -----------------------------
-if st.button("Analyze Invoice", type="primary"):
+    data["Glucose_Category"] = pd.cut(
+        data["Glucose"], [0, 100, 125, np.inf],
+        labels=["Normal", "Elevated", "High"]
+    )
 
-    # Predict expected freight
-    expected_freight = model.predict(
-        pd.DataFrame({
-            "Dollars": [dollars]
-        })
-    )[0]
+    data["Glucose_BMI_Interaction"] = data["Glucose"] * data["BMI"]
 
-    # Calculate deviation
-    deviation_percentage = (
-        (actual_freight - expected_freight)
-        / expected_freight
-    ) * 100
+    processed = preprocessor.transform(data)
+    probability = float(model.predict(processed, verbose=0)[0][0])
 
-    # Determine risk
-    if deviation_percentage > 50:
-        risk = "HIGH"
-    elif deviation_percentage > 20:
-        risk = "MEDIUM"
-    else:
-        risk = "LOW"
+    prediction = "Diabetic" if probability >= 0.5 else "Non-Diabetic"
 
-    st.divider()
+    st.subheader("Prediction Result")
+    st.write(f"### Prediction: {prediction}")
+    st.write(f"### Diabetes Probability: {probability * 100:.2f}%")
+'''
 
-    # -----------------------------
-    # Display Results
-    # -----------------------------
-    st.subheader("Invoice Analysis")
+with open("app.py", "w", encoding="utf-8") as f:
+    f.write(streamlit_code)
 
-    result_col1, result_col2, result_col3 = st.columns(3)
-
-    with result_col1:
-        st.metric(
-            "Expected Freight",
-            f"${expected_freight:.2f}"
-        )
-
-    with result_col2:
-        st.metric(
-            "Freight Deviation",
-            f"{deviation_percentage:.2f}%"
-        )
-
-    with result_col3:
-        if risk == "HIGH":
-            st.error(f"Risk Level: {risk}")
-        elif risk == "MEDIUM":
-            st.warning(f"Risk Level: {risk}")
-        else:
-            st.success(f"Risk Level: {risk}")
+print("app.py created successfully.")
+print("Run with: streamlit run app.py")
